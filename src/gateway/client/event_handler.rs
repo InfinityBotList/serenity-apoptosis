@@ -411,6 +411,9 @@ full_event! {
     MessagePollVoteAdd { event: MessagePollVoteAddEvent };
     /// Dispatched when a user removes a previous vote on a poll.
     MessagePollVoteRemove { event: MessagePollVoteRemoveEvent };
+
+    /// Unknown event
+    Unknown { event: serde_json::Value };
 }
 
 /// An event handler that receives raw `dispatch` events.

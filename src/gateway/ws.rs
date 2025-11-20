@@ -2,6 +2,7 @@ use std::env::consts;
 use std::io::Read;
 use std::time::SystemTime;
 
+use bytes::Bytes;
 #[cfg(feature = "transport_compression_zlib")]
 use flate2::Decompress as ZlibInflater;
 use flate2::read::ZlibDecoder;
@@ -112,7 +113,7 @@ impl Compression {
     #[cfg(any(feature = "transport_compression_zlib", feature = "transport_compression_zstd"))]
     const DECOMPRESSED_CAPACITY: usize = 64 * 1024;
 
-    fn inflate(&mut self, slice: &[u8]) -> Result<Option<&[u8]>> {
+    fn inflate(&mut self, slice: &[u8]) -> Result<Option<Bytes>> {
         match self {
             Compression::Payload {
                 decompressed,
@@ -129,7 +130,8 @@ impl Compression {
                     why
                 })?;
 
-                Ok(Some(decompressed.as_slice()))
+                let owned_data: Vec<u8> = std::mem::take(decompressed);
+                Ok(Some(Bytes::from(owned_data)))
             },
 
             #[cfg(feature = "transport_compression_zlib")]
@@ -154,7 +156,10 @@ impl Compression {
                 compressed.clear();
                 let produced = (inflater.total_out() - pre_out) as usize;
 
-                Ok(Some(&decompressed[..produced]))
+                let owned_data: Box<[u8]> = std::mem::take(decompressed);
+                let decompressed = Bytes::from(owned_data);
+
+                Ok(Some(decompressed.slice(..produced)))
             },
 
             #[cfg(feature = "transport_compression_zstd")]
@@ -194,7 +199,9 @@ impl Compression {
                 }
 
                 let produced = out_buffer.pos();
-                Ok(Some(&decompressed[..produced]))
+                let owned_data: Box<[u8]> = std::mem::take(decompressed);
+                let decompressed = Bytes::from(owned_data);
+                Ok(Some(decompressed.slice(..produced)))
             },
         }
     }
@@ -253,15 +260,15 @@ impl WsClient {
         })
     }
 
-    pub(crate) async fn recv_json(&mut self) -> Result<Option<GatewayEvent>> {
+    pub(crate) async fn recv_json(&mut self) -> Result<Option<(GatewayEvent, Bytes)>> {
         let message = match timeout(TIMEOUT, self.stream.next()).await {
             Ok(Some(Ok(msg))) => msg,
             Ok(Some(Err(e))) => return Err(e.into()),
             Ok(None) | Err(_) => return Ok(None),
         };
 
-        let json_bytes = match message {
-            Message::Text(ref payload) => payload.as_bytes(),
+        let raw_data = match message {
+            Message::Text(_) => message.into_data(),
             Message::Binary(ref bytes) => match self.compression.inflate(bytes)? {
                 Some(decompressed) => decompressed,
                 None => return Ok(None),
@@ -272,10 +279,10 @@ impl WsClient {
             _ => return Ok(None),
         };
 
-        match serde_json::from_slice(json_bytes) {
-            Ok(event) => Ok(Some(event)),
+        match serde_json::from_slice(&raw_data) {
+            Ok(event) => Ok(Some((event, raw_data))),
             Err(err) => {
-                debug!("Failing text: {}", String::from_utf8_lossy(json_bytes));
+                debug!("Failing text: {}", String::from_utf8_lossy(&raw_data));
                 Err(Error::Json(err))
             },
         }
