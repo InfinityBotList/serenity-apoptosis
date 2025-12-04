@@ -5,6 +5,7 @@
 //! [`ClientBuilder::framework`]: crate::gateway::client::ClientBuilder::framework
 
 use async_trait::async_trait;
+use bytes::Bytes;
 
 use crate::gateway::client::{Client, Context, FullEvent};
 
@@ -22,6 +23,11 @@ pub trait Framework: Send + Sync {
     }
     /// Called on every incoming event.
     async fn dispatch(&self, ctx: &Context, event: &FullEvent);
+
+    /// Called on every incoming event with the raw event data.
+    async fn dispatch_raw(&self, _ctx: &Context, _raw: Bytes) {
+        // Default implementation does nothing
+    }
 }
 
 #[async_trait]

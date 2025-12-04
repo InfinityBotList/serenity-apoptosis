@@ -39,6 +39,7 @@ use std::time::{Duration as StdDuration, Instant};
 #[cfg(any(feature = "transport_compression_zlib", feature = "transport_compression_zstd"))]
 use aformat::aformat_into;
 use aformat::{ArrayString, CapStr, aformat};
+use bytes::Bytes;
 use tokio_tungstenite::tungstenite::error::Error as TungsteniteError;
 use tokio_tungstenite::tungstenite::protocol::frame::CloseFrame;
 #[cfg(feature = "tracing_instrument")]
@@ -439,18 +440,26 @@ impl Shard {
     /// Returns a [`GatewayError::OverloadedShard`] if the shard would have too many guilds
     /// assigned to it.
     #[cfg_attr(feature = "tracing_instrument", instrument(skip(self)))]
-    pub fn handle_event(&mut self, event: Result<GatewayEvent>) -> Result<Option<ShardAction>> {
+    pub fn handle_event(
+        &mut self,
+        event: Result<(GatewayEvent, Bytes)>,
+    ) -> Result<Option<ShardAction>> {
         match event {
-            Ok(GatewayEvent::Dispatch {
-                seq,
-                event,
-            }) => Ok(self.handle_gateway_dispatch(seq, event).map(ShardAction::Dispatch)),
-            Ok(GatewayEvent::Heartbeat) => {
+            Ok((
+                GatewayEvent::Dispatch {
+                    seq,
+                    event,
+                },
+                raw,
+            )) => Ok(self
+                .handle_gateway_dispatch(seq, event)
+                .map(|x| ShardAction::Dispatch((x, raw)))),
+            Ok((GatewayEvent::Heartbeat, _)) => {
                 info!("[{:?}] Received shard heartbeat", self.info);
 
                 Ok(Some(ShardAction::Heartbeat))
             },
-            Ok(GatewayEvent::HeartbeatAck) => {
+            Ok((GatewayEvent::HeartbeatAck, _)) => {
                 self.last_heartbeat_ack = Some(Instant::now());
                 self.last_heartbeat_acknowledged = true;
 
@@ -458,7 +467,7 @@ impl Shard {
 
                 Ok(None)
             },
-            Ok(GatewayEvent::Hello(interval)) => {
+            Ok((GatewayEvent::Hello(interval), _)) => {
                 debug!("[{:?}] Received a Hello; interval: {}", self.info, interval);
 
                 if self.stage == ConnectionStage::Resuming {
@@ -475,7 +484,7 @@ impl Shard {
                     Ok(Some(action))
                 }
             },
-            Ok(GatewayEvent::InvalidateSession(resumable)) => {
+            Ok((GatewayEvent::InvalidateSession(resumable), _)) => {
                 info!("[{:?}] Received session invalidation", self.info);
                 if !resumable {
                     self.resume_metadata = None;
@@ -483,7 +492,7 @@ impl Shard {
 
                 Ok(Some(ShardAction::Reconnect))
             },
-            Ok(GatewayEvent::Reconnect) => Ok(Some(ShardAction::Reconnect)),
+            Ok((GatewayEvent::Reconnect, _)) => Ok(Some(ShardAction::Reconnect)),
             Err(Error::Gateway(GatewayError::Closed(data))) => {
                 self.handle_gateway_closed(data.as_ref())?;
                 Ok(Some(ShardAction::Reconnect))
@@ -712,7 +721,7 @@ pub enum ShardAction {
     Heartbeat,
     Identify,
     Reconnect,
-    Dispatch(Box<Event>),
+    Dispatch((Box<Event>, Bytes)),
 }
 
 /// Information about a [`ShardRunner`].

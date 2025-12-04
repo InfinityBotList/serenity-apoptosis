@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use bytes::Bytes;
+
 use super::event_handler::{EventHandler, RawEventHandler};
 use super::{Context, FullEvent};
 #[cfg(feature = "cache")]
@@ -44,6 +46,7 @@ pub(crate) async fn dispatch_model(
     #[cfg(feature = "framework")] framework: Option<Arc<dyn Framework>>,
     event_handler: Option<Arc<dyn EventHandler>>,
     raw_event_handler: Option<Arc<dyn RawEventHandler>>,
+    raw_payload: Bytes,
 ) {
     if let Some(raw_handler) = raw_event_handler {
         raw_handler.raw_event(context.clone(), &event).await;
@@ -58,8 +61,8 @@ pub(crate) async fn dispatch_model(
     spawn_named("dispatch::user", async move {
         #[cfg(feature = "framework")]
         tokio::join!(
-            dispatch_framework(&context, framework, &full_event, extra_event.as_ref()),
-            dispatch_event_handler(&context, event_handler, &full_event, extra_event.as_ref())
+            dispatch_framework(&context, framework, &full_event, extra_event.as_ref(), raw_payload),
+            dispatch_event_handler(&context, event_handler, &full_event, extra_event.as_ref(),)
         );
 
         #[cfg(not(feature = "framework"))]
@@ -73,8 +76,11 @@ async fn dispatch_framework(
     framework: Option<Arc<dyn Framework>>,
     full_event: &FullEvent,
     extra_event: Option<&FullEvent>,
+    raw_payload: Bytes,
 ) {
     if let Some(framework) = framework {
+        framework.dispatch_raw(context, raw_payload).await;
+
         if let Some(extra_event) = extra_event {
             framework.dispatch(context, extra_event).await;
         }
@@ -493,6 +499,9 @@ fn update_cache_with_event(
             event,
         },
         Event::MessagePollVoteRemove(event) => FullEvent::MessagePollVoteRemove {
+            event,
+        },
+        Event::Unknown(event) => FullEvent::Unknown {
             event,
         },
     };

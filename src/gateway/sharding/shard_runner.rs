@@ -197,7 +197,7 @@ impl ShardRunner {
                             }
                         }
                     },
-                    ShardAction::Dispatch(event) => {
+                    ShardAction::Dispatch((event, raw)) => {
                         #[cfg(feature = "voice")]
                         {
                             self.handle_voice_event(&event).await;
@@ -223,6 +223,7 @@ impl ShardRunner {
                                 self.framework.clone(),
                                 self.event_handler.clone(),
                                 self.raw_event_handler.clone(),
+                                raw,
                             )
                             .await;
                         }
@@ -371,7 +372,7 @@ impl ShardRunner {
             Err(why) => Err(why),
         };
 
-        let is_ack = matches!(gateway_event, Ok(GatewayEvent::HeartbeatAck));
+        let is_ack = matches!(gateway_event, Ok((GatewayEvent::HeartbeatAck, _)));
         let action = match self.shard.handle_event(gateway_event) {
             Ok(action) => action,
             Err(Error::Gateway(

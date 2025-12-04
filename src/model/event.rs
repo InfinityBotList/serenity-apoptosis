@@ -1169,6 +1169,9 @@ pub enum Event {
     MessagePollVoteAdd(MessagePollVoteAddEvent),
     /// A user has removed a previous vote on a Message Poll.
     MessagePollVoteRemove(MessagePollVoteRemoveEvent),
+    /// An unknown event
+    #[serde(untagged)]
+    Unknown(serde_json::Value),
 }
 
 impl Event {
