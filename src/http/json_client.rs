@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 use std::cell::Cell;
+use std::sync::Arc;
 
 use arrayvec::ArrayVec;
 use chrono::{DateTime, Utc};
@@ -80,13 +81,13 @@ fn reason_into_header(reason: &str) -> Headers {
 /// [`Error::Http`] or [`Error::Json`].
 #[derive(Debug)]
 pub struct JsonHttp {
-    http: Http
+    http: Arc<Http>,
 }
 
 impl JsonHttp {
     /// Construct an authorized HTTP client.
     #[must_use]
-    pub fn new(http: Http) -> Self {
+    pub fn new(http: Arc<Http>) -> Self {
         Self { http }
     }
 
