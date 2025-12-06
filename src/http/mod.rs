@@ -19,6 +19,7 @@
 //! [`Client`]: crate::Client
 //! [model]: crate::model
 
+mod json_client;
 mod client;
 mod error;
 mod multipart;
@@ -32,6 +33,7 @@ use std::sync::Arc;
 use reqwest::Method;
 pub use reqwest::StatusCode;
 
+pub use self::json_client::*;
 pub use self::client::*;
 pub use self::error::*;
 pub use self::multipart::*;
