@@ -75,11 +75,11 @@ fn reason_into_header(reason: &str) -> Headers {
     headers
 }
 
-/// A low-level client for sending requests to Discord's HTTP REST API.
+/// A low-level client for sending requests to Discord's HTTP REST API with a raw JSON response
 ///
 /// **Note**: For all member functions that return a [`Result`], the Error kind will be either
 /// [`Error::Http`] or [`Error::Json`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct JsonHttp {
     http: Arc<Http>,
 }
